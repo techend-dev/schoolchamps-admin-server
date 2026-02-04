@@ -76,14 +76,21 @@ app.get('/', (req: Request, res: Response) => {
   });
 });
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/schools', schoolRoutes);
-app.use('/api/submissions', submissionRoutes);
-app.use('/api/blogs', blogRoutes);
-app.use('/api/ai', aiRoutes);
-app.use('/api/wordpress', wordpressRoutes);
-app.use('/api/admin', adminRoutes);
+// API Routes (Supporting both /api prefix and root level)
+const routes = [
+  { path: '/auth', handler: authRoutes },
+  { path: '/schools', handler: schoolRoutes },
+  { path: '/submissions', handler: submissionRoutes },
+  { path: '/blogs', handler: blogRoutes },
+  { path: '/ai', handler: aiRoutes },
+  { path: '/wordpress', handler: wordpressRoutes },
+  { path: '/admin', handler: adminRoutes },
+];
+
+routes.forEach(route => {
+  app.use(`/api${route.path}`, route.handler);
+  app.use(route.path, route.handler);
+});
 
 // 404 handler
 app.use((req: Request, res: Response) => {
