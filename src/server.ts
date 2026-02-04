@@ -55,7 +55,7 @@ connectDB();
 // Health check route
 app.get('/', (req: Request, res: Response) => {
   res.json({
-    message: 'Dreamable Multi-School Blog Management API',
+    message: 'SchoolChamps Blog Management API',
     version: '1.0.0',
     status: 'active',
   });
