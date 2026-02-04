@@ -1,7 +1,7 @@
 {
-  "name": "dreamable-backend",
+  "name": "schoolchamps-backend",
   "version": "1.0.0",
-  "description": "Backend for Dreamable Multi-School Blog Management System",
+  "description": "Backend for SchoolChamps Multi-School Blog Management System",
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/server.ts",
