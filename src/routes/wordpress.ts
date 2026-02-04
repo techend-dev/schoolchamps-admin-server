@@ -34,11 +34,11 @@ router.post(
       // Upload featured image if exists
       if (blog.featuredImage) {
         try {
-          // If it's a local file path, upload to WordPress
-          if (fs.existsSync(blog.featuredImage)) {
+          const isRemote = blog.featuredImage.startsWith('http');
+          if (isRemote || fs.existsSync(blog.featuredImage)) {
             const mediaResponse = await wordpressClient.uploadMedia({
               path: blog.featuredImage,
-              originalname: blog.featuredImage.split('/').pop() || 'image.jpg',
+              originalname: blog.featuredImage.split('/').pop()?.split('?')[0] || 'image.jpg',
               mimetype: 'image/jpeg',
             } as Express.Multer.File);
             featuredMediaId = mediaResponse.id;
@@ -125,8 +125,10 @@ router.post(
 
       const mediaResponse = await wordpressClient.uploadMedia(req.file);
 
-      // Delete local file after upload
-      fs.unlinkSync(req.file.path);
+      // Delete local file after upload if it exists
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
 
       res.json({
         message: 'Media uploaded successfully',

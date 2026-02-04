@@ -19,12 +19,24 @@ class WordPressClient {
   async uploadMedia(file: Express.Multer.File): Promise<any> {
     const FormData = require('form-data');
     const fs = require('fs');
+    const axios = require('axios');
 
     const formData = new FormData();
-    formData.append('file', fs.createReadStream(file.path), {
-      filename: file.originalname,
-      contentType: file.mimetype,
-    });
+
+    if (file.path.startsWith('http')) {
+      // Handle remote URL (Cloudinary)
+      const response = await axios.get(file.path, { responseType: 'stream' });
+      formData.append('file', response.data, {
+        filename: file.originalname,
+        contentType: file.mimetype,
+      });
+    } else {
+      // Handle local file path
+      formData.append('file', fs.createReadStream(file.path), {
+        filename: file.originalname,
+        contentType: file.mimetype,
+      });
+    }
 
     const response = await axios.post(
       `${process.env.WP_BASE_URL}/media`,
