@@ -12,7 +12,7 @@ export interface IBlog extends Document {
   category: string;
   seoKeywords: string[];
   readingTime: number;
-  status: 'draft_created' | 'review' | 'published_wp';
+  status: 'draft_writer' | 'draft_created' | 'review' | 'approved_school' | 'rejected' | 'published_wp';
   assignedSchool?: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
   wordpressPostId?: number;
@@ -71,8 +71,8 @@ const BlogSchema: Schema = new Schema(
     },
     status: {
       type: String,
-      enum: ['draft_created', 'review', 'published_wp'],
-      default: 'draft_created',
+      enum: ['draft_writer', 'draft_created', 'review', 'approved_school', 'rejected', 'published_wp'],
+      default: 'draft_writer',
     },
     assignedSchool: {
       type: Schema.Types.ObjectId,

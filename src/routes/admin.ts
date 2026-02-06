@@ -2,6 +2,8 @@ import { Router, Response } from 'express';
 import School from '../models/School';
 import Submission from '../models/Submission';
 import Blog from '../models/Blog';
+import { body, validationResult } from 'express-validator';
+import bcrypt from 'bcryptjs';
 import User from '../models/User';
 import { authMiddleware, roleMiddleware, AuthRequest } from '../middleware/authMiddleware';
 
@@ -120,7 +122,7 @@ router.put(
     try {
       const { status } = req.body;
 
-      if (!['draft_created', 'review', 'published_wp'].includes(status)) {
+      if (!['draft_writer', 'draft_created', 'review', 'approved_school', 'rejected', 'published_wp'].includes(status)) {
         res.status(400).json({ message: 'Invalid status' });
         return;
       }
@@ -197,6 +199,107 @@ router.put(
       });
     } catch (error: any) {
       console.error('Toggle user active error:', error);
+      res.status(500).json({ message: 'Server error', error: error.message });
+    }
+  }
+);
+
+// @route   POST /api/admin/users
+// @desc    Create a new user (Writer/Marketer)
+// @access  Private (Admin only)
+router.post(
+  '/users',
+  [
+    authMiddleware,
+    roleMiddleware('admin'),
+    body('name').trim().notEmpty().withMessage('Name is required'),
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('role').isIn(['writer', 'marketer']).withMessage('Invalid role'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  ],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      const { name, email, password, role } = req.body;
+
+      // Check if user already exists
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        res.status(400).json({ message: 'User already exists' });
+        return;
+      }
+
+      // Hash password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      const user = new User({
+        name,
+        email,
+        password: hashedPassword,
+        role,
+        isActive: true,
+      });
+
+      await user.save();
+
+      res.status(201).json({
+        message: 'User created successfully',
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        },
+      });
+    } catch (error: any) {
+      console.error('Create user error:', error);
+      res.status(500).json({ message: 'Server error', error: error.message });
+    }
+  }
+);
+
+// @route   POST /api/admin/users/:id/reset-password
+// @desc    Reset user password
+// @access  Private (Admin only)
+router.post(
+  '/users/:id/reset-password',
+  [
+    authMiddleware,
+    roleMiddleware('admin'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  ],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        res.status(400).json({ errors: errors.array() });
+        return;
+      }
+
+      const { password } = req.body;
+      const user = await User.findById(req.params.id);
+
+      if (!user) {
+        res.status(404).json({ message: 'User not found' });
+        return;
+      }
+
+      // Hash password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      user.password = hashedPassword;
+      await user.save();
+
+      res.json({ message: 'Password reset successfully' });
+    } catch (error: any) {
+      console.error('Reset password error:', error);
       res.status(500).json({ message: 'Server error', error: error.message });
     }
   }

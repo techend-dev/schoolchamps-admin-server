@@ -162,6 +162,41 @@ router.put(
   }
 );
 
+// @route   PUT /api/blogs/approve/:id
+// @desc    School approves blog for admin publishing
+// @access  Private (School, Admin)
+router.put(
+  '/approve/:id',
+  [authMiddleware, roleMiddleware('school', 'admin')],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const blog = await Blog.findById(req.params.id);
+
+      if (!blog) {
+        res.status(404).json({ message: 'Blog not found' });
+        return;
+      }
+
+      // Verify school owns this blog
+      if (req.user?.role === 'school' && blog.assignedSchool?.toString() !== req.user?.schoolId) {
+        res.status(403).json({ message: 'Not authorized to approve this blog' });
+        return;
+      }
+
+      blog.status = 'approved_school';
+      await blog.save();
+
+      res.json({
+        message: 'Blog approved and sent for publishing',
+        blog,
+      });
+    } catch (error: any) {
+      console.error('Approve blog error:', error);
+      res.status(500).json({ message: 'Server error', error: error.message });
+    }
+  }
+);
+
 // @route   DELETE /api/blogs/:id
 // @desc    Delete blog
 // @access  Private (Admin only)
@@ -180,6 +215,38 @@ router.delete(
       res.json({ message: 'Blog deleted successfully' });
     } catch (error: any) {
       console.error('Delete blog error:', error);
+      res.status(500).json({ message: 'Server error', error: error.message });
+    }
+  }
+);
+
+import { upload } from '../utils/multerConfig';
+
+// ... existing routes ...
+
+// @route   POST /api/blogs/:id/image
+// @desc    Upload featured image for blog
+// @access  Private (Writer, Admin)
+router.post(
+  '/:id/image',
+  [authMiddleware, roleMiddleware('writer', 'admin'), upload.single('image')],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const blog = await Blog.findById(req.params.id);
+      if (!blog) {
+        res.status(404).json({ message: 'Blog not found' });
+        return;
+      }
+
+      if (req.file) {
+        blog.featuredImage = (req.file as any).path;
+        await blog.save();
+        res.json({ message: 'Image uploaded successfully', url: blog.featuredImage });
+      } else {
+        res.status(400).json({ message: 'No image file provided' });
+      }
+    } catch (error: any) {
+      console.error('Upload image error:', error);
       res.status(500).json({ message: 'Server error', error: error.message });
     }
   }

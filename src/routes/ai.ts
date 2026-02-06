@@ -37,11 +37,13 @@ router.post(
         slug: aiResponse.slug,
         metaTitle: aiResponse.metaTitle,
         metaDescription: aiResponse.metaDescription,
+        featuredImage: submission.attachments?.[0], // Use the first attachment as featured image
         seoKeywords: aiResponse.seoKeywords,
         readingTime: aiResponse.readingTime,
         category: submission.category,
         tags: aiResponse.seoKeywords,
         status: 'draft_created',
+        assignedSchool: submission.schoolId,
         createdBy: req.user!.id,
       });
 
@@ -64,10 +66,10 @@ router.post(
 
 // @route   POST /api/ai/generate-social/:blogId
 // @desc    Generate social media post from blog using AI
-// @access  Private (Marketer, Admin)
+// @access  Private (Marketer, Admin, Writer, School)
 router.post(
   '/generate-social/:blogId',
-  [authMiddleware, roleMiddleware('marketer', 'admin')],
+  [authMiddleware, roleMiddleware('marketer', 'admin', 'writer', 'school')],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const { platform } = req.body;
