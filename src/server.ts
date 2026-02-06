@@ -28,6 +28,7 @@ const allowedOrigins = [
   'http://localhost:8080',
   'http://localhost:8081',
   'https://schoolchamps-admin-client.vercel.app',
+  'https://app.schoolchamps.in',
   process.env.FRONTEND_URL
 ].filter(Boolean) as string[];
 
@@ -116,3 +117,4 @@ app.listen(PORT, () => {
 });
 
 export default app;
+
