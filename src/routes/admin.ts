@@ -96,7 +96,7 @@ router.get(
 // @access  Private (Admin only)
 router.get(
   '/blogs',
-  [authMiddleware, roleMiddleware('admin')],
+  [authMiddleware, roleMiddleware('admin', 'writer')],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const blogs = await Blog.find()
@@ -118,7 +118,7 @@ router.get(
 // @access  Private (Admin only)
 router.put(
   '/blogs/:id/status',
-  [authMiddleware, roleMiddleware('admin')],
+  [authMiddleware, roleMiddleware('admin', 'writer')],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const { status } = req.body;
