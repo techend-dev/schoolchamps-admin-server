@@ -13,6 +13,9 @@ export interface ISchool extends Document {
   logo?: string;
   website?: string;
   coins: number;
+  instagramAccessToken?: string;
+  instagramAccountId?: string;
+  instagramPageId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -66,6 +69,15 @@ const SchoolSchema: Schema = new Schema(
     coins: {
       type: Number,
       default: 0,
+    },
+    instagramAccessToken: {
+      type: String,
+    },
+    instagramAccountId: {
+      type: String,
+    },
+    instagramPageId: {
+      type: String,
     },
   },
   {

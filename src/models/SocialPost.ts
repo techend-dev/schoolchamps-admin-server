@@ -7,6 +7,7 @@ export interface ISocialPost extends Document {
   hashtags: string[];
   scheduledFor?: Date;
   isPublished: boolean;
+  publishedId?: string;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -37,6 +38,9 @@ const SocialPostSchema: Schema = new Schema(
     isPublished: {
       type: Boolean,
       default: false,
+    },
+    publishedId: {
+      type: String,
     },
     createdBy: {
       type: Schema.Types.ObjectId,

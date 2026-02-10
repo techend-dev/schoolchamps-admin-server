@@ -3,16 +3,16 @@ import geminiClient from '../utils/geminiClient';
 import Submission from '../models/Submission';
 import Blog from '../models/Blog';
 import SocialPost from '../models/SocialPost';
+import School from '../models/School';
+import InstagramClient from '../utils/InstagramClient';
 import { authMiddleware, roleMiddleware, AuthRequest } from '../middleware/authMiddleware';
 
 const router = Router();
 
-// @route   POST /api/ai/generate-draft/:submissionId
-// @desc    Generate blog draft from submission using AI
 // @access  Private (Writer, Admin)
 router.post(
   '/generate-draft/:submissionId',
-  [authMiddleware, roleMiddleware('writer', 'admin')],
+  [authMiddleware, roleMiddleware('writer', 'admin', 'marketer', 'school')],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const submission = await Submission.findById(req.params.submissionId);
@@ -191,13 +191,48 @@ router.post(
       }
 
       const posts = [];
+
       for (const platform of platforms) {
+        let isPublished = false;
+        let publishedId = null;
+
+        if (platform === 'instagram') {
+          try {
+            // Real Instagram Publishing (using global system accounts)
+            const blog = await Blog.findById(blogId);
+            const imageUrl = blog?.featuredImage;
+
+            if (imageUrl) {
+              const fullImageUrl = imageUrl.startsWith('http')
+                ? imageUrl
+                : `${process.env.BACKEND_URL || 'http://localhost:5000'}/${imageUrl.replace(/\\/g, '/')}`;
+
+              const creationId = await InstagramClient.createMediaContainer(
+                fullImageUrl,
+                caption
+              );
+
+              publishedId = await InstagramClient.publishMedia(
+                creationId
+              );
+              isPublished = true;
+            }
+          } catch (error: any) {
+            console.error('Central Instagram publish failed:', error.message);
+            // Fallback to recording as draft if real post fails
+          }
+        } else if (platform === 'facebook' || platform === 'linkedin' || platform === 'twitter') {
+          // Simulation for others
+          isPublished = true;
+        }
+
         const socialPost = new SocialPost({
           blogId,
           platform,
           caption,
           hashtags,
-          isPublished: true, // Simulation
+          isPublished: isPublished,
+          publishedId: publishedId,
           createdBy: req.user!.id,
         });
         await socialPost.save();
