@@ -143,4 +143,76 @@ router.post(
   }
 );
 
+// @route   POST /api/ai/generate-unified-social/:blogId
+// @desc    Generate unified social media post from blog using AI
+// @access  Private (Marketer, Admin, Writer, School)
+router.post(
+  '/generate-unified-social/:blogId',
+  [authMiddleware, roleMiddleware('marketer', 'admin', 'writer', 'school')],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const blog = await Blog.findById(req.params.blogId);
+      if (!blog) {
+        res.status(404).json({ message: 'Blog not found' });
+        return;
+      }
+
+      // Generate unified social post using Gemini AI
+      const summary = blog.metaDescription || blog.content.substring(0, 200);
+      const aiResponse = await geminiClient.generateUnifiedSocialPost(
+        blog.title,
+        summary
+      );
+
+      res.status(201).json({
+        message: 'Unified social post generated successfully',
+        socialPost: aiResponse,
+      });
+    } catch (error: any) {
+      console.error('Generate unified social post error:', error);
+      res.status(500).json({ message: 'Failed to generate unified social post', error: error.message });
+    }
+  }
+);
+
+// @route   POST /api/ai/post-to-social
+// @desc    Save social posts for multiple platforms
+// @access  Private (Marketer, Admin, Writer, School)
+router.post(
+  '/post-to-social',
+  [authMiddleware, roleMiddleware('marketer', 'admin', 'writer', 'school')],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { blogId, caption, hashtags, platforms } = req.body;
+
+      if (!blogId || !caption || !platforms || !Array.isArray(platforms)) {
+        res.status(400).json({ message: 'Missing required fields' });
+        return;
+      }
+
+      const posts = [];
+      for (const platform of platforms) {
+        const socialPost = new SocialPost({
+          blogId,
+          platform,
+          caption,
+          hashtags,
+          isPublished: true, // Simulation
+          createdBy: req.user!.id,
+        });
+        await socialPost.save();
+        posts.push(socialPost);
+      }
+
+      res.status(201).json({
+        message: 'Social posts recorded successfully',
+        posts,
+      });
+    } catch (error: any) {
+      console.error('Post to social error:', error);
+      res.status(500).json({ message: 'Failed to record social posts', error: error.message });
+    }
+  }
+);
+
 export default router;

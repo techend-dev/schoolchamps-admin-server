@@ -55,12 +55,12 @@ Output ONLY valid JSON with this exact structure (no markdown, no code blocks):
         model: 'gemini-2.5-flash',
         contents: prompt,
       });
-      
+
       const text = response.text || '';
-      
+
       // Remove markdown code blocks if present
       const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      
+
       const parsed = JSON.parse(cleanText);
       return parsed;
     } catch (error: any) {
@@ -99,12 +99,12 @@ Output ONLY valid JSON with this exact structure (no markdown, no code blocks):
         model: 'gemini-2.5-flash',
         contents: prompt,
       });
-      
+
       const text = response.text || '';
-      
+
       // Remove markdown code blocks if present
       const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      
+
       const parsed = JSON.parse(cleanText);
       return parsed;
     } catch (error: any) {
@@ -127,11 +127,47 @@ Provide the improved content:`;
         model: 'gemini-2.5-flash',
         contents: prompt,
       });
-      
+
       return response.text || '';
     } catch (error: any) {
       console.error('Gemini API Error:', error.message);
       throw new Error('Failed to improve content');
+    }
+  }
+
+  async generateUnifiedSocialPost(
+    blogTitle: string,
+    blogSummary: string
+  ): Promise<SocialPostResponse> {
+    const prompt = `Write a single, highly engaging social media post for this blog article that works perfectly across Instagram, Twitter, LinkedIn, and Facebook:
+
+Title: ${blogTitle}
+Summary: ${blogSummary}
+
+Guidelines:
+- Length: Strictly under 280 characters (to fit Twitter/X).
+- Tone: Professional yet engaging, storyteller style.
+- Emojis: Use a few relevant emojis.
+- Hashtags: Include exactly 5-7 highly relevant hashtags.
+
+Output ONLY valid JSON with this exact structure (no markdown, no code blocks):
+{
+  "caption": "...",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3"]
+}`;
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+      });
+
+      const text = response.text || '';
+      const cleanText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      return JSON.parse(cleanText);
+    } catch (error: any) {
+      console.error('Gemini API Error:', error.message);
+      throw new Error('Failed to generate unified social post');
     }
   }
 }
