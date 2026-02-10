@@ -5,6 +5,7 @@ import Blog from '../models/Blog';
 import { body, validationResult } from 'express-validator';
 import bcrypt from 'bcryptjs';
 import User from '../models/User';
+import Transaction from '../models/Transaction';
 import { authMiddleware, roleMiddleware, AuthRequest } from '../middleware/authMiddleware';
 
 const router = Router();
@@ -300,6 +301,64 @@ router.post(
       res.json({ message: 'Password reset successfully' });
     } catch (error: any) {
       console.error('Reset password error:', error);
+      res.status(500).json({ message: 'Server error', error: error.message });
+    }
+  }
+);
+
+// @route   GET /api/admin/credit-analytics
+// @desc    Get credit management analytics for super admin
+// @access  Private (Admin only)
+router.get(
+  '/credit-analytics',
+  [authMiddleware, roleMiddleware('admin')],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      // 1. Total coins across all schools
+      const schools = await School.find({}, 'name coins city');
+      const totalCoins = schools.reduce((sum, school) => sum + (school.coins || 0), 0);
+
+      // 2. Total revenue (sum of amounts in purchase transactions)
+      const revenueData = await Transaction.aggregate([
+        { $match: { type: 'purchase' } },
+        { $group: { _id: null, totalRevenue: { $sum: '$amount' } } }
+      ]);
+      const totalRevenue = revenueData.length > 0 ? revenueData[0].totalRevenue : 0;
+
+      // 3. Last 30 days trends (daily purchases vs usage)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const dailyTrends = await Transaction.aggregate([
+        { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            purchases: { $sum: { $cond: [{ $eq: ["$type", "purchase"] }, "$coins", 0] } },
+            usage: { $sum: { $cond: [{ $eq: ["$type", "debit"] }, "$coins", 0] } },
+          }
+        },
+        { $sort: { _id: 1 } }
+      ]);
+
+      // 4. Recent transactions
+      const recentTransactions = await Transaction.find()
+        .populate('schoolId', 'name')
+        .sort({ createdAt: -1 })
+        .limit(20);
+
+      res.json({
+        stats: {
+          totalCoins,
+          totalRevenue,
+          activeSchools: schools.length,
+        },
+        schools,
+        dailyTrends,
+        recentTransactions
+      });
+    } catch (error: any) {
+      console.error('Get credit analytics error:', error);
       res.status(500).json({ message: 'Server error', error: error.message });
     }
   }

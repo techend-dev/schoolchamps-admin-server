@@ -15,5 +15,7 @@ declare namespace NodeJS {
     CLOUDINARY_URL: string;
     MAX_FILE_SIZE?: string;
     UPLOAD_DIR?: string;
+    RAZORPAY_KEY_ID: string;
+    RAZORPAY_KEY_SECRET: string;
   }
 }

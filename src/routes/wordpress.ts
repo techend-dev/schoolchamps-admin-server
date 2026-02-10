@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import Blog from '../models/Blog';
 import Submission from '../models/Submission';
+import Transaction from '../models/Transaction';
 import wordpressClient from '../utils/wordpressClient';
 import { authMiddleware, roleMiddleware, AuthRequest } from '../middleware/authMiddleware';
 import { upload } from '../utils/multerConfig';
@@ -10,10 +11,10 @@ const router = Router();
 
 // @route   POST /api/wordpress/publish/:id
 // @desc    Publish blog to WordPress
-// @access  Private (School, Admin)
+// @access  Private (School, Admin, Writer)
 router.post(
   '/publish/:id',
-  [authMiddleware, roleMiddleware('school', 'admin')],
+  [authMiddleware, roleMiddleware('school', 'admin', 'writer')],
   async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       const blog = await Blog.findById(req.params.id);
@@ -23,10 +24,62 @@ router.post(
         return;
       }
 
-      // Verify school owns this blog (if user is school)
-      if (req.user?.role === 'school' && blog.assignedSchool?.toString() !== req.user?.schoolId) {
+      // Ensure blog is assigned to a school
+      if (!blog.assignedSchool) {
+        res.status(400).json({ message: 'Blog must be assigned to a school before publishing' });
+        return;
+      }
+
+      // Verify school ownership or admin/writer permission
+      if (req.user?.role === 'school' && blog.assignedSchool.toString() !== req.user?.schoolId) {
         res.status(403).json({ message: 'Not authorized to publish this blog' });
         return;
+      }
+
+      // Credit System: Each post costs 99 coins.
+      const School = require('../models/School').default; // Use require if import is not available at top
+      const school = await School.findById(blog.assignedSchool);
+
+      if (!school) {
+        res.status(404).json({ message: 'Assigned school not found' });
+        return;
+      }
+
+      if (school.coins < 99 && req.user?.role !== 'admin') {
+        res.status(403).json({
+          message: 'Insufficient coins. Each post requires 99 coins.',
+          availableCoins: school.coins
+        });
+        return;
+      }
+
+      // Deduct 99 coins and earn 50 coins (net -49)
+      if (req.user?.role !== 'admin') {
+        const coinsBefore = school.coins;
+        school.coins = coinsBefore - 99 + 50;
+        await school.save();
+
+        // Log Debit Transaction
+        await Transaction.create({
+          schoolId: school._id,
+          type: 'debit',
+          coins: 99,
+          coinsBefore: coinsBefore,
+          coinsAfter: coinsBefore - 99,
+          referenceId: blog._id,
+          description: `Post publishing cost: ${blog.title}`,
+        });
+
+        // Log Reward Transaction
+        await Transaction.create({
+          schoolId: school._id,
+          type: 'reward',
+          coins: 50,
+          coinsBefore: coinsBefore - 99,
+          coinsAfter: school.coins,
+          referenceId: blog._id,
+          description: `Reward for publishing: ${blog.title}`,
+        });
       }
 
       let featuredMediaId: number | undefined;

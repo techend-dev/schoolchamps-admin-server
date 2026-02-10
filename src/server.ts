@@ -16,6 +16,7 @@ import blogRoutes from './routes/blogs';
 import aiRoutes from './routes/ai';
 import wordpressRoutes from './routes/wordpress';
 import adminRoutes from './routes/admin';
+import paymentRoutes from './routes/payment';
 
 // Initialize Express app
 const app: Application = express();
@@ -86,6 +87,7 @@ const routes = [
   { path: '/ai', handler: aiRoutes },
   { path: '/wordpress', handler: wordpressRoutes },
   { path: '/admin', handler: adminRoutes },
+  { path: '/payment', handler: paymentRoutes },
 ];
 
 routes.forEach(route => {

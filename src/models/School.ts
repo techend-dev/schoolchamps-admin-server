@@ -12,6 +12,7 @@ export interface ISchool extends Document {
   isActive: boolean;
   logo?: string;
   website?: string;
+  coins: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -61,6 +62,10 @@ const SchoolSchema: Schema = new Schema(
     },
     website: {
       type: String,
+    },
+    coins: {
+      type: Number,
+      default: 0,
     },
   },
   {
