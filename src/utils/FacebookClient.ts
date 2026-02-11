@@ -11,8 +11,8 @@ class FacebookClient {
     private async getCredentials(): Promise<{ accessToken: string; pageId: string }> {
         const tokenDoc = await SocialToken.findOne({ platform: 'facebook' });
 
-        const accessToken = tokenDoc?.accessToken || process.env.META_ACCESS_TOKEN;
-        const pageId = tokenDoc?.pageId || process.env.META_PAGE_ID;
+        const accessToken = (tokenDoc?.accessToken || process.env.META_ACCESS_TOKEN || '').trim();
+        const pageId = (tokenDoc?.pageId || process.env.META_PAGE_ID || '').trim();
 
         if (!accessToken || !pageId) {
             throw new Error('Facebook credentials missing. Set META_ACCESS_TOKEN and META_PAGE_ID, or store them via the admin setup.');
