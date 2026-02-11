@@ -281,11 +281,10 @@ router.post(
 
 // @route   GET /api/ai/linkedin/auth
 // @desc    Redirect to LinkedIn OAuth authorization page
-// @access  Private (Admin only)
+// @access  Public (opens in popup - LinkedIn login itself is the security gate)
 router.get(
   '/linkedin/auth',
-  [authMiddleware, roleMiddleware('admin')],
-  (req: AuthRequest, res: Response): void => {
+  (req: Request, res: Response): void => {
     try {
       const authUrl = LinkedInClient.getAuthUrl();
       res.redirect(authUrl);
