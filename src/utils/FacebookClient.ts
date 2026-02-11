@@ -7,15 +7,43 @@ class FacebookClient {
     /**
      * Get the stored Facebook token + page ID from DB,
      * falling back to env vars if not yet stored in DB.
+     * Auto-exchanges User tokens for Page tokens at runtime.
      */
     private async getCredentials(): Promise<{ accessToken: string; pageId: string }> {
         const tokenDoc = await SocialToken.findOne({ platform: 'facebook' });
 
-        const accessToken = (tokenDoc?.accessToken || process.env.META_ACCESS_TOKEN || '').trim();
+        let accessToken = (tokenDoc?.accessToken || process.env.META_ACCESS_TOKEN || '').trim();
         const pageId = (tokenDoc?.pageId || process.env.META_PAGE_ID || '').trim();
 
         if (!accessToken || !pageId) {
             throw new Error('Facebook credentials missing. Set META_ACCESS_TOKEN and META_PAGE_ID, or store them via the admin setup.');
+        }
+
+        // Auto-exchange: check if this is a User token and swap for Page token
+        try {
+            const accountsResp = await axios.get(`${this.baseUrl}/${pageId}`, {
+                params: {
+                    fields: 'access_token',
+                    access_token: accessToken,
+                },
+            });
+
+            if (accountsResp.data?.access_token) {
+                const pageToken = accountsResp.data.access_token;
+                // Only log + save if it's different (i.e., was a user token)
+                if (pageToken !== accessToken) {
+                    console.log('� Auto-exchanged User Token → Page Access Token');
+                    accessToken = pageToken;
+                    // Save the Page token to DB so next time it's used directly
+                    await SocialToken.findOneAndUpdate(
+                        { platform: 'facebook' },
+                        { accessToken: pageToken, pageId },
+                        { upsert: true }
+                    );
+                }
+            }
+        } catch (err: any) {
+            console.log('⚠️ Could not auto-exchange for Page Token, using token as-is:', err.response?.data?.error?.message || err.message);
         }
 
         return { accessToken, pageId };
@@ -29,30 +57,11 @@ class FacebookClient {
     async postToPageFeed(message: string, imageUrl?: string): Promise<string> {
         const { accessToken, pageId } = await this.getCredentials();
 
-        // Debug: check token type before posting
-        try {
-            const debugResp = await axios.get(`${this.baseUrl}/debug_token`, {
-                params: {
-                    input_token: accessToken,
-                    access_token: `${process.env.META_APP_ID}|${process.env.META_APP_SECRET}`,
-                },
-            });
-            const tokenInfo = debugResp.data?.data;
-            console.log('🔍 Token Debug Info:', JSON.stringify({
-                type: tokenInfo?.type,
-                app_id: tokenInfo?.app_id,
-                is_valid: tokenInfo?.is_valid,
-                scopes: tokenInfo?.scopes,
-                granular_scopes: tokenInfo?.granular_scopes,
-                expires_at: tokenInfo?.expires_at,
-            }, null, 2));
-        } catch (debugErr: any) {
-            console.log('⚠️ Could not debug token:', debugErr.message);
-        }
+        console.log(`📤 Posting to Facebook page ${pageId} (token type will be PAGE after auto-exchange)`);
 
         try {
             if (imageUrl) {
-                // Post with image — send as form data in body
+                // Post with image
                 const fullImageUrl = imageUrl.startsWith('http')
                     ? imageUrl
                     : `${process.env.BACKEND_URL || 'http://localhost:5000'}/${imageUrl.replace(/\\/g, '/')}`;
@@ -70,7 +79,7 @@ class FacebookClient {
                 console.log('✅ Facebook photo post published:', response.data.id);
                 return response.data.id;
             } else {
-                // Text-only post — send as form data in body
+                // Text-only post
                 const response = await axios.post(
                     `${this.baseUrl}/${pageId}/feed`,
                     new URLSearchParams({
@@ -106,32 +115,27 @@ class FacebookClient {
     }
 
     /**
-     * Save credentials — accepts a User Token and auto-exchanges it for a Page Token.
-     * If a Page Access Token is passed directly, it's saved as-is.
+     * Save credentials with auto User→Page token exchange.
      */
     async saveCredentials(userOrPageToken: string, pageId: string): Promise<void> {
-        let pageAccessToken = userOrPageToken;
+        let pageAccessToken = userOrPageToken.trim();
+        const trimmedPageId = pageId.trim();
 
+        // Try to exchange for a proper Page Access Token
         try {
-            // Try to get the proper Page Access Token from /me/accounts
-            const accountsResponse = await axios.get(`${this.baseUrl}/me/accounts`, {
+            const pageResp = await axios.get(`${this.baseUrl}/${trimmedPageId}`, {
                 params: {
-                    access_token: userOrPageToken,
-                    fields: 'id,name,access_token',
+                    fields: 'access_token,name',
+                    access_token: pageAccessToken,
                 },
             });
 
-            const pages = accountsResponse.data?.data || [];
-            const matchingPage = pages.find((p: any) => p.id === pageId);
-
-            if (matchingPage?.access_token) {
-                pageAccessToken = matchingPage.access_token;
-                console.log(`✅ Exchanged User Token for Page Access Token (page: ${matchingPage.name})`);
-            } else {
-                console.log('ℹ️ No page match in /me/accounts — using token as-is (may already be a Page Token)');
+            if (pageResp.data?.access_token) {
+                pageAccessToken = pageResp.data.access_token;
+                console.log(`✅ Got Page Access Token for: ${pageResp.data.name || trimmedPageId}`);
             }
         } catch (err: any) {
-            console.log('ℹ️ Could not exchange for Page Token, saving as-is:', err.message);
+            console.log('ℹ️ Could not get Page Token via /{page_id}?fields=access_token, saving as-is:', err.response?.data?.error?.message || err.message);
         }
 
         await SocialToken.findOneAndUpdate(
@@ -139,7 +143,7 @@ class FacebookClient {
             {
                 platform: 'facebook',
                 accessToken: pageAccessToken,
-                pageId,
+                pageId: trimmedPageId,
                 tokenExpiresAt: undefined,
             },
             { upsert: true, new: true }
