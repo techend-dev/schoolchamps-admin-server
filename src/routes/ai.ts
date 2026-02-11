@@ -195,13 +195,17 @@ router.post(
 
       const posts = [];
 
+      const postCaption = hashtags && Array.isArray(hashtags) && hashtags.length > 0
+        ? `${caption}\n\n${hashtags.map((h: string) => h.startsWith('#') ? h : `#${h}`).join(' ')}`
+        : caption;
+
       for (const platform of platforms) {
         let isPublished = false;
         let publishedId = null;
 
         if (platform === 'instagram') {
           try {
-            // Real Instagram Publishing (using global system accounts)
+            // Real Instagram Publishing
             const blog = await Blog.findById(blogId);
             const imageUrl = blog?.featuredImage;
 
@@ -212,7 +216,7 @@ router.post(
 
               const creationId = await InstagramClient.createMediaContainer(
                 fullImageUrl,
-                caption
+                postCaption
               );
 
               publishedId = await InstagramClient.publishMedia(
@@ -222,13 +226,12 @@ router.post(
             }
           } catch (error: any) {
             console.error('Central Instagram publish failed:', error.message);
-            // Fallback to recording as draft if real post fails
           }
         } else if (platform === 'facebook') {
           try {
             const blog = await Blog.findById(blogId);
             publishedId = await FacebookClient.postToPageFeed(
-              caption,
+              postCaption,
               blog?.featuredImage
             );
             isPublished = true;
@@ -239,7 +242,7 @@ router.post(
           try {
             const blog = await Blog.findById(blogId);
             publishedId = await LinkedInClient.createPost(
-              caption,
+              postCaption,
               blog?.featuredImage
             );
             isPublished = true;
