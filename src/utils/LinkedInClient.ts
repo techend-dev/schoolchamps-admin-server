@@ -11,7 +11,7 @@ class LinkedInClient {
     /**
      * Get stored LinkedIn credentials from DB.
      */
-    private async getCredentials(): Promise<{ accessToken: string; personUrn: string }> {
+    private async getCredentials(): Promise<{ accessToken: string; personUrn: string; orgUrn?: string }> {
         const tokenDoc = await SocialToken.findOne({ platform: 'linkedin' });
 
         if (!tokenDoc?.accessToken || !tokenDoc?.personUrn) {
@@ -21,24 +21,26 @@ class LinkedInClient {
         return {
             accessToken: tokenDoc.accessToken,
             personUrn: tokenDoc.personUrn,
+            orgUrn: tokenDoc.orgUrn,
         };
     }
 
     /**
      * Generate the OAuth authorization URL for initial setup.
+     * Includes organization scopes for page management.
      */
     getAuthUrl(): string {
         if (!this.clientId || !this.redirectUri) {
             throw new Error('LINKEDIN_CLIENT_ID and LINKEDIN_REDIRECT_URI must be set in .env');
         }
 
-        const scopes = 'openid profile w_member_social';
+        // Updated scopes to include organization posting
+        const scopes = 'openid profile w_member_social w_organization_social rw_organization_admin';
         return `${this.oauthUrl}/authorization?response_type=code&client_id=${this.clientId}&redirect_uri=${encodeURIComponent(this.redirectUri)}&scope=${encodeURIComponent(scopes)}`;
     }
 
     /**
      * Exchange authorization code for access + refresh tokens.
-     * Called once during initial OAuth setup.
      */
     async exchangeCodeForTokens(code: string): Promise<void> {
         try {
@@ -82,8 +84,57 @@ class LinkedInClient {
     }
 
     /**
+     * Fetch organizations where the authenticated user is an administrator.
+     */
+    async getManagedOrganizations(): Promise<any[]> {
+        const { accessToken } = await this.getCredentials();
+
+        try {
+            // Step 1: Get organizational access control elements
+            const response = await axios.get(`${this.apiUrl}/rest/organizationalEntityAcls?q=roleAssignee`, {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'LinkedIn-Version': '202401',
+                    'X-Restli-Protocol-Version': '2.0.0',
+                },
+            });
+
+            const organizations = response.data.elements || [];
+            const orgList = [];
+
+            for (const org of organizations) {
+                const orgUrn = org.organizationalTarget;
+
+                try {
+                    // Step 2: Fetch organization details (name/logo)
+                    const detailResponse = await axios.get(`${this.apiUrl}/rest/organizations/${orgUrn.split(':').pop()}`, {
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                            'LinkedIn-Version': '202401',
+                            'X-Restli-Protocol-Version': '2.0.0',
+                        },
+                    });
+
+                    orgList.push({
+                        urn: orgUrn,
+                        name: detailResponse.data.localizedName || detailResponse.data.vanityName,
+                        vanityName: detailResponse.data.vanityName,
+                    });
+                } catch (e: any) {
+                    console.warn(`Could not fetch details for org ${orgUrn}:`, e.message);
+                    orgList.push({ urn: orgUrn, name: 'Unknown Organization' });
+                }
+            }
+
+            return orgList;
+        } catch (error: any) {
+            console.error('❌ Failed to fetch LinkedIn organizations:', error.response?.data || error.message);
+            throw new Error(`Failed to fetch LinkedIn organizations: ${error.response?.data?.message || error.message}`);
+        }
+    }
+
+    /**
      * Refresh the access token using the stored refresh token.
-     * LinkedIn access tokens last 60 days, refresh tokens last 1 year.
      */
     async refreshAccessToken(): Promise<boolean> {
         try {
@@ -121,15 +172,13 @@ class LinkedInClient {
 
     /**
      * Register an image upload with LinkedIn and upload the image.
-     * Returns the image URN to attach to a post.
      */
-    private async uploadImage(imageUrl: string, accessToken: string, personUrn: string): Promise<string> {
-        // Step 1: Register the upload
+    private async uploadImage(imageUrl: string, accessToken: string, ownerUrn: string): Promise<string> {
         const initResponse = await axios.post(
             `${this.apiUrl}/rest/images?action=initializeUpload`,
             {
                 initializeUploadRequest: {
-                    owner: personUrn,
+                    owner: ownerUrn,
                 },
             },
             {
@@ -145,7 +194,6 @@ class LinkedInClient {
         const uploadUrl = initResponse.data.value.uploadUrl;
         const imageUrn = initResponse.data.value.image;
 
-        // Step 2: Download the image and upload to LinkedIn
         const fullImageUrl = imageUrl.startsWith('http')
             ? imageUrl
             : `${process.env.BACKEND_URL || 'http://localhost:5000'}/${imageUrl.replace(/\\/g, '/')}`;
@@ -159,21 +207,20 @@ class LinkedInClient {
             },
         });
 
-        console.log('✅ LinkedIn image uploaded:', imageUrn);
         return imageUrn;
     }
 
     /**
      * Create a post on LinkedIn with optional image.
-     * Uses the Posts API (v2).
-     * Returns the post URN.
+     * Posts to organization if orgUrn is available, otherwise falls back to personUrn.
      */
     async createPost(text: string, imageUrl?: string): Promise<string> {
-        const { accessToken, personUrn } = await this.getCredentials();
+        const { accessToken, personUrn, orgUrn } = await this.getCredentials();
+        const targetAuthor = orgUrn || personUrn;
 
         try {
             const postBody: any = {
-                author: personUrn,
+                author: targetAuthor,
                 commentary: text,
                 visibility: 'PUBLIC',
                 distribution: {
@@ -184,9 +231,8 @@ class LinkedInClient {
                 lifecycleState: 'PUBLISHED',
             };
 
-            // If image provided, upload it first and attach to post
             if (imageUrl) {
-                const imageUrn = await this.uploadImage(imageUrl, accessToken, personUrn);
+                const imageUrn = await this.uploadImage(imageUrl, accessToken, targetAuthor);
                 postBody.content = {
                     media: {
                         title: 'Post Image',
@@ -204,9 +250,8 @@ class LinkedInClient {
                 },
             });
 
-            // LinkedIn returns the post URN in the x-restli-id header
             const postUrn = response.headers['x-restli-id'] || response.data?.id || 'posted';
-            console.log('✅ LinkedIn post published:', postUrn);
+            console.log(`✅ LinkedIn post published to ${orgUrn ? 'Organization' : 'Profile'}:`, postUrn);
             return postUrn;
         } catch (error: any) {
             console.error('❌ LinkedIn post failed:', error.response?.data || error.message);

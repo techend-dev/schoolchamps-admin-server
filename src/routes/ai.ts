@@ -370,8 +370,10 @@ router.get(
         linkedin: {
           connected: liConnected,
           personUrn: liToken?.personUrn || null,
+          orgUrn: liToken?.orgUrn || null,
           expiresAt: liExpiresAt,
           hasRefreshToken: !!liToken?.refreshToken,
+          metadata: liToken?.metadata || {},
         },
         instagram: {
           connected: igConnected,
@@ -426,6 +428,52 @@ router.delete(
       res.json({ message: `${platform} account disconnected` });
     } catch (error: any) {
       res.status(500).json({ message: 'Failed to disconnect account', error: error.message });
+    }
+  }
+);
+
+// @route   GET /api/ai/social-accounts/linkedin/pages
+// @desc    Get managed LinkedIn organizations
+// @access  Private (Admin only)
+router.get(
+  '/social-accounts/linkedin/pages',
+  [authMiddleware, roleMiddleware('admin')],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const organizations = await LinkedInClient.getManagedOrganizations();
+      res.json({ organizations });
+    } catch (error: any) {
+      res.status(500).json({ message: 'Failed to fetch LinkedIn pages', error: error.message });
+    }
+  }
+);
+
+// @route   POST /api/ai/social-accounts/linkedin/select-page
+// @desc    Select a LinkedIn organization for posting
+// @access  Private (Admin only)
+router.post(
+  '/social-accounts/linkedin/select-page',
+  [authMiddleware, roleMiddleware('admin')],
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      const { orgUrn, orgName } = req.body;
+
+      if (!orgUrn) {
+        res.status(400).json({ message: 'Organization URN is required' });
+        return;
+      }
+
+      await SocialToken.findOneAndUpdate(
+        { platform: 'linkedin' },
+        {
+          orgUrn,
+          metadata: { selectedPageName: orgName }
+        }
+      );
+
+      res.json({ message: 'LinkedIn page selected successfully' });
+    } catch (error: any) {
+      res.status(500).json({ message: 'Failed to select LinkedIn page', error: error.message });
     }
   }
 );
