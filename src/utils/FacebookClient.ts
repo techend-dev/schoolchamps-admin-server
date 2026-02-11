@@ -29,6 +29,27 @@ class FacebookClient {
     async postToPageFeed(message: string, imageUrl?: string): Promise<string> {
         const { accessToken, pageId } = await this.getCredentials();
 
+        // Debug: check token type before posting
+        try {
+            const debugResp = await axios.get(`${this.baseUrl}/debug_token`, {
+                params: {
+                    input_token: accessToken,
+                    access_token: `${process.env.META_APP_ID}|${process.env.META_APP_SECRET}`,
+                },
+            });
+            const tokenInfo = debugResp.data?.data;
+            console.log('🔍 Token Debug Info:', JSON.stringify({
+                type: tokenInfo?.type,
+                app_id: tokenInfo?.app_id,
+                is_valid: tokenInfo?.is_valid,
+                scopes: tokenInfo?.scopes,
+                granular_scopes: tokenInfo?.granular_scopes,
+                expires_at: tokenInfo?.expires_at,
+            }, null, 2));
+        } catch (debugErr: any) {
+            console.log('⚠️ Could not debug token:', debugErr.message);
+        }
+
         try {
             if (imageUrl) {
                 // Post with image — send as form data in body
