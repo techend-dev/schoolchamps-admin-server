@@ -109,6 +109,9 @@ app.use((err: any, req: Request, res: Response, next: any) => {
   });
 });
 
+// Import token refresh service
+import tokenRefreshService from './utils/tokenRefreshService';
+
 // Start server
 const PORT = process.env.PORT || 5000;
 
@@ -116,6 +119,9 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 API URL: http://localhost:${PORT}`);
+
+  // Start cron-based token refresh service
+  tokenRefreshService.start();
 });
 
 export default app;
